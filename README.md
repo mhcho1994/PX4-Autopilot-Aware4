@@ -33,7 +33,7 @@ Refer to the [Guide for Contributions](https://docs.px4.io/master/en/contribute/
     * Member: [Yoon]()
     * Member: [Cho](https://github.com/mhcho1994)
 
-See also [maintainers list](https://px4.io/community/maintainers/) (px4.io) and the [contributors list](https://github.com/PX4/PX4-Autopilot/graphs/contributors) (Github).
+See also [maintainers list](https://px4.io/community/maintainers/) (px4.io) and the [contributors list](https://github.com/PX4/PX4-Autopilot/graphs/contributors) of the upstream repository (Github).
 
 
 ## Test Target
