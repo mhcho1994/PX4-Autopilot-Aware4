@@ -4451,7 +4451,192 @@ Commander::offboard_control_update()
 		_vehicle_status_flags.offboard_control_signal_lost = offboard_lost;
 		_status_changed = true;
 	}
+
+// ====== FDCL modification ======
+
+	offboard_engage_s _offboard_engage_companion;
+	_custom_offboard_engage_sub.update(&_offboard_engage_companion);
+
+	/* ref -> do not use code commented */
+	// struct offboard_engage_s _offboard_engage_companion;
+	// int _custom_offboard_engage_sub = orb_subscribe(ORB_ID(offboard_engage));
+	// bool _custom_offboard_engage_sub_updated;
+	// orb_check(_custom_offboard_engage_sub, &_custom_offboard_engage_sub_updated);
+	// orb_copy(ORB_ID(offboard_engage), _custom_offboard_engage_sub, &_offboard_engage_companion);
+
+	if (_offboard_engage_companion.offboard_custom_engage == 1) {
+		if (_custom_offboard_persist_cnt < 10 && _custom_offboard_persist_cnt >= 0) {
+			_custom_offboard_persist_cnt += _offboard_engage_companion.offboard_custom_engage;
+		}
+		else if (_custom_offboard_persist_cnt < 0) {
+			_custom_offboard_persist_cnt = 0;
+		}
+		else if (_custom_offboard_persist_cnt > 10) {
+			_custom_offboard_persist_cnt = 10;
+		}
+	}
+	else {
+		_custom_offboard_persist_cnt = 0;
+	}
+
+	if(_custom_offboard_persist_cnt >= 10) {
+		_offboard_wpt_broadcast.offboard_custom_ready = offboard_trajectory_s::OFFBOARD_CUSTOM_ON;
+	}
+	else {
+		_offboard_wpt_broadcast.offboard_custom_ready = offboard_trajectory_s::OFFBOARD_CUSTOM_OFF;
+	}
+
+	if (offboard_available && (_offboard_control_mode_sub.get().position || _offboard_control_mode_sub.get().attitude)) {
+		if (_custom_offboard_persist_cnt >=3) {
+
+			/* 1. Read current mission status directly using data manager */
+			/* load missions from storage */
+			// dm_lock(DM_KEY_MISSION_STATE);
+
+			/* read current mission state */
+			// int read_res = dm_read(DM_KEY_MISSION_STATE, 0, &_mission_state, sizeof(mission_s));
+
+			// dm_unlock(DM_KEY_MISSION_STATE);
+
+			// if (read_res == sizeof(mission_s)) {
+			// 	if (_scenario.dataman_id != _mission_state.dataman_id || _scenario.count != _mission_state.count) {
+			// 		_readinit = true;
+			// 	}
+			// }
+			/* End of method 1 */
+
+			/* 2. Copy the data from data subscriber */
+			_mission_state_sub.update();
+			_mission_state_sub.copy(&_mission_state);
+
+			if (_scenario.dataman_id != _mission_state.dataman_id || _scenario.count != _mission_state.count) {
+				_readinit = true;
+			}
+			/* End of method 2 */
+
+			/* 3. Copy the data from subscirber using orb_copy -> Do not use */
+			/* Error "exceeded maximum number of file descriptors" would occur */
+			// struct mission_s _mission_state;
+			// int _mission_state_sub = orb_subscribe(ORB_ID(mission));
+			// bool _mission_state_sub_updated;
+			// orb_check(_mission_state_sub, &_mission_state_sub_updated);
+			// orb_copy(ORB_ID(mission), _mission_state_sub, &_mission_state);
+
+			// if (_scenario.dataman_id != _mission_state.dataman_id || _scenario.count != _mission_state.count) {
+			// 	_readinit = true;
+			// }
+			/* End of method 3 */
+
+			if (_readinit) {
+				_scenario.timestamp = hrt_absolute_time();
+				_scenario.dataman_id = _mission_state.dataman_id;
+				_scenario.count = _mission_state.count;
+
+				const dm_item_t dm_current = (dm_item_t)_mission_state.dataman_id;
+				struct mission_item_s _missionitem_wpt = {};
+				int32_t _index_wpt_first {_scenario.count};
+				int32_t _index_wpt_last {1};
+
+				for (int32_t i = 1; i < _scenario.count; i++) {
+					const ssize_t len = sizeof(_missionitem_wpt);
+
+					if (dm_read(dm_current, i, &_missionitem_wpt, len) != len) {
+						/* not supposed to happen unless the datamanager can't access the SD card, etc. */
+						PX4_ERR("dataman read failure");
+						break;
+					}
+
+					if (i <= _index_wpt_first && _missionitem_wpt.nav_cmd == NAV_CMD_WAYPOINT) {
+						_index_wpt_first = i;
+						_index_offboard_wpt_start = _index_wpt_first;
+					}
+
+					if (i >= _index_wpt_last && _missionitem_wpt.nav_cmd == NAV_CMD_WAYPOINT) {
+						_index_wpt_last = i;
+						_index_offboard_wpt_end = _index_wpt_last;
+					}
+				}
+
+				/* Need revision -> current mission sequence actually starts from 0 */
+				// _scenario.current_seq = _index_wpt_first;
+				// dm_write(DM_KEY_MISSION_STATE, 0, &_scenario, sizeof(mission_s));
+
+				for (int32_t i = _index_wpt_first; i <= _index_wpt_last; i++) {
+					dm_read(dm_current, i, &_missionitem_wpt, sizeof(_missionitem_wpt));
+					if (_missionitem_wpt.nav_cmd != NAV_CMD_WAYPOINT) {
+						/* Assert that all the mission items between the first and last waypoints should be NAV_CMD_WAYPOINT type */
+						PX4_ERR("non WAYPOINT type mission item exists in the given scenario");
+						break;
+					}
+				}
+
+				PX4_INFO("FIRST WPT: %d",(int)_index_wpt_first);
+				PX4_INFO("LAST WPT: %d",(int)_index_wpt_last);
+
+				_readinit = false;
+
+			}
+		}
+
+		if (_custom_offboard_persist_cnt >=5) {
+
+			_triplet_setpoint_sub.update();
+
+			_reference_position.initReference(_local_position_sub.get().ref_lat,_local_position_sub.get().ref_lon);
+
+			_reference_position.project(_triplet_setpoint_sub.get().previous.lat,
+			_triplet_setpoint_sub.get().previous.lon,tmp_triplet_previous(0),tmp_triplet_previous(1));
+			_reference_position.project(_triplet_setpoint_sub.get().current.lat,
+			_triplet_setpoint_sub.get().current.lon,tmp_triplet_current(0),tmp_triplet_current(1));
+			_reference_position.project(_triplet_setpoint_sub.get().next.lat,
+			_triplet_setpoint_sub.get().next.lon,tmp_triplet_next(0),tmp_triplet_next(1));
+
+			tmp_triplet_previous(2) = -(_triplet_setpoint_sub.get().previous.alt-_local_position_sub.get().ref_alt);
+			tmp_triplet_current(2) = -(_triplet_setpoint_sub.get().current.alt-_local_position_sub.get().ref_alt);
+			tmp_triplet_next(2) = -(_triplet_setpoint_sub.get().next.alt-_local_position_sub.get().ref_alt);
+
+			_offboard_wpt_broadcast.timestamp = hrt_absolute_time();
+
+			_offboard_wpt_broadcast.type = offboard_trajectory_s::MAV_TRAJECTORY_REPRESENTATION_WAYPOINTS;
+			// _offboard_wpt_broadcast.offboard_custom_ready = offboard_trajectory_s::OFFBOARD_CUSTOM_ON;
+			_offboard_wpt_broadcast.last_waypoint_call = offboard_trajectory_s::FIRST_MIDDLE_WAYPOINTS;
+
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_0].position[0] = tmp_triplet_previous(0);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_0].position[1] = tmp_triplet_previous(1);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_0].position[2] = tmp_triplet_previous(2);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_0].yaw = 0.03f;
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_0].point_valid = true;
+
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_1].position[0] = tmp_triplet_current(0);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_1].position[1] = tmp_triplet_current(1);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_1].position[2] = tmp_triplet_current(2);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_1].yaw = 0.05f;
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_1].point_valid = true;
+
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_2].position[0] = tmp_triplet_next(0);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_2].position[1] = tmp_triplet_next(1);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_2].position[2] = tmp_triplet_next(2);
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_2].yaw = 0.07f;
+			_offboard_wpt_broadcast.waypoints[offboard_trajectory_s::POINT_2].point_valid = true;
+
+			orb_advert_t offboard_trajectory_pub = orb_advertise(ORB_ID(offboard_trajectory), &_offboard_wpt_broadcast);
+			orb_publish(ORB_ID(offboard_trajectory), offboard_trajectory_pub, &_offboard_wpt_broadcast);
+
+		}
+
+	}
+
+	// PX4_INFO("Current CNT: %d",(int32_t)_custom_offboard_persist_cnt);
+
+	// if (_index_offboard_wpt_start == _mission_state.current_seq) {
+
+	// 	// PX4_INFO("FIRST WPT CALL");
+	// }
+
 }
+
+// ====== FDCL modification ======
+
 
 void Commander::esc_status_check()
 {

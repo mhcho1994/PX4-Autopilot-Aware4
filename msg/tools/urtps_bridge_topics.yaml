@@ -88,6 +88,7 @@ rtps:
     send:    true
   - msg:     sensor_combined
     send:    true
+# ====== FDCL modification ======
   - msg:     vehicle_local_position
     send:    true
   - msg:     vehicle_attitude
@@ -98,3 +99,10 @@ rtps:
     send:    true
   - msg:     takeoff_status
     send:    true
+  - msg:     offboard_trajectory
+    send:    true
+  - msg:     offboard_waypoint
+    send:    true
+  - msg:     offboard_engage
+    receive: true
+# ====== FDCL modification ======

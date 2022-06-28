@@ -120,6 +120,11 @@ set(msg_files
 	npfg_status.msg
 	obstacle_distance.msg
 	offboard_control_mode.msg
+# ====== FDCL modification ======
+	offboard_engage.msg
+	offboard_waypoint.msg
+	offboard_trajectory.msg
+# ====== FDCL modification ======
 	onboard_computer_status.msg
 	optical_flow.msg
 	orbit_status.msg

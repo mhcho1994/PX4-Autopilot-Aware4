@@ -92,6 +92,20 @@
 #include <uORB/topics/vtol_vehicle_status.h>
 #include <uORB/topics/wind.h>
 
+// ====== FDCL modification ======
+#include <lib/avoidance/ObstacleAvoidance.hpp>
+#include <uORB/topics/vehicle_trajectory_waypoint.h>
+#include <uORB/topics/position_setpoint_triplet.h>
+#include <uORB/topics/position_setpoint.h>
+#include <uORB/topics/offboard_waypoint.h>
+#include <uORB/topics/offboard_trajectory.h>
+#include <lib/geo/geo.h>
+#include <uORB/topics/mission.h>
+#include <uORB/topics/offboard_engage.h>
+
+using namespace matrix;
+// ====== FDCL modification ======
+
 using math::constrain;
 using systemlib::Hysteresis;
 
@@ -393,6 +407,22 @@ private:
 	vehicle_land_detected_s	_vehicle_land_detected{};
 	vtol_vehicle_status_s	_vtol_vehicle_status{};
 
+	// ====== FDCL modification ======
+	MapProjection 			_reference_position{};
+	offboard_trajectory_s 		_offboard_wpt_broadcast{};
+
+	Vector3f tmp_triplet_previous;
+	Vector3f tmp_triplet_current;
+	Vector3f tmp_triplet_next;
+
+	mission_s _scenario {};
+	mission_s _mission_state {};
+	bool _readinit{true};
+	int32_t _index_offboard_wpt_start;
+	int32_t _index_offboard_wpt_end;
+	int32_t _custom_offboard_persist_cnt {0};
+	// ====== FDCL modification ======
+
 	hrt_abstime _last_wind_warning{0};
 
 	// commander publications
@@ -440,6 +470,11 @@ private:
 	uORB::SubscriptionData<offboard_control_mode_s>		_offboard_control_mode_sub{ORB_ID(offboard_control_mode)};
 	uORB::SubscriptionData<vehicle_global_position_s>	_global_position_sub{ORB_ID(vehicle_global_position)};
 	uORB::SubscriptionData<vehicle_local_position_s>	_local_position_sub{ORB_ID(vehicle_local_position)};
+	// ====== FDCL modification ======
+	uORB::SubscriptionData<position_setpoint_triplet_s> 	_triplet_setpoint_sub{ORB_ID(position_setpoint_triplet)};
+	uORB::Subscription 					_custom_offboard_engage_sub{ORB_ID(offboard_engage)};
+	uORB::SubscriptionData<mission_s> 			_mission_state_sub{ORB_ID(mission)};
+	// ====== FDCL modification ======
 
 	// Publications
 	uORB::Publication<actuator_armed_s>			_actuator_armed_pub{ORB_ID(actuator_armed)};

@@ -78,7 +78,8 @@ Navigator::Navigator() :
 	_land(this),
 	_precland(this),
 	_rtl(this),
-	_follow_target(this)
+	_follow_target(this),
+	_offboard_custom(this)
 {
 	/* Create a list of our possible navigation types */
 	_navigation_mode_array[0] = &_mission;
@@ -89,6 +90,7 @@ Navigator::Navigator() :
 	_navigation_mode_array[5] = &_precland;
 	_navigation_mode_array[6] = &_vtol_takeoff;
 	_navigation_mode_array[7] = &_follow_target;
+	_navigation_mode_array[8] = &_offboard_custom;
 
 	_handle_back_trans_dec_mss = param_find("VT_B_DEC_MSS");
 	_handle_reverse_delay = param_find("VT_B_REV_DEL");
@@ -707,6 +709,10 @@ void Navigator::run()
 		case vehicle_status_s::NAVIGATION_STATE_DESCEND:
 		case vehicle_status_s::NAVIGATION_STATE_TERMINATION:
 		case vehicle_status_s::NAVIGATION_STATE_OFFBOARD:
+			_pos_sp_triplet_published_invalid_once = false;
+			navigation_mode_new = &_offboard_custom;
+			break;
+
 		case vehicle_status_s::NAVIGATION_STATE_STAB:
 		default:
 			navigation_mode_new = nullptr;
