@@ -175,6 +175,11 @@ private:
 	bool find_mission_land_start();
 
 	/**
+	 * Find the starting and end indices of waypoint mission (exclusively used for offboard custom mode)
+	 */
+	void find_wpt_mission_item();
+
+	/**
 	 * Return the index of the closest mission item to the current global position.
 	 */
 	int32_t index_closest_mission_item() const;

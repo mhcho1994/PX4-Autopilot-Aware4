@@ -150,6 +150,7 @@ OffboardCustom::on_inactive()
 
 			// find and store landing start marker (if available)
 			find_mission_land_start();
+			find_wpt_mission_item();
 		}
 
 		/* On init let's check the mission, maybe there is already one available. */
@@ -800,21 +801,58 @@ OffboardCustom::set_mission_items()
 	_navigator->set_position_setpoint_triplet_updated();
 }
 
-// void
-// OffboardCustom::find_wpt_mission_item()
-// {
+void
+OffboardCustom::find_wpt_mission_item()
+{
+	const dm_item_t dm_current = (dm_item_t)_offboardcustom.dataman_id;
+	struct mission_item_s _missionitem_wpt = {};
 
+	int32_t _index_wpt_first {_offboardcustom.count};
+	int32_t _index_wpt_last {1};
 
+	int32_t _index_offboard_wpt_start {};
+	int32_t _index_offboard_wpt_end {};
 
+	for (int32_t i = 1; i < _offboardcustom.count; i++) {
+		const ssize_t len = sizeof(_missionitem_wpt);
 
-// }
+		if (dm_read(dm_current, i, &_missionitem_wpt, len) != len) {
+			/* not supposed to happen unless the datamanager can't access the SD card, etc. */
+			PX4_ERR("dataman read failure");
+			break;
+		}
+
+		if (i <= _index_wpt_first && _missionitem_wpt.nav_cmd == NAV_CMD_WAYPOINT) {
+			_index_wpt_first = i;
+			_index_offboard_wpt_start = _index_wpt_first;
+		}
+
+		if (i >= _index_wpt_last && _missionitem_wpt.nav_cmd == NAV_CMD_WAYPOINT) {
+			_index_wpt_last = i;
+			_index_offboard_wpt_end = _index_wpt_last;
+		}
+	}
+
+	for (int32_t i = _index_offboard_wpt_start; i <= _index_offboard_wpt_end; i++) {
+		dm_read(dm_current, i, &_missionitem_wpt, sizeof(_missionitem_wpt));
+		if (_missionitem_wpt.nav_cmd != NAV_CMD_WAYPOINT) {
+			/* Assert that all the mission items between the first and last waypoints should be NAV_CMD_WAYPOINT type */
+			PX4_ERR("non WAYPOINT type mission item exists in the given scenario");
+			break;
+		}
+	}
+
+	PX4_INFO("FIRST WPT: %d",(int)_index_wpt_first);
+	PX4_INFO("LAST WPT: %d",(int)_index_wpt_last);
+
+}
 
 			// if (_readinit) {
 			// 	_scenario.timestamp = hrt_absolute_time();
 			// 	_scenario.dataman_id = _mission_state.dataman_id;
 			// 	_scenario.count = _mission_state.count;
 
-			// 	const dm_item_t dm_current = (dm_item_t)_mission_state.dataman_id;
+			//
 			// 	struct mission_item_s _missionitem_wpt = {};
 			// 	int32_t _index_wpt_first {_scenario.count};
 			// 	int32_t _index_wpt_last {1};
